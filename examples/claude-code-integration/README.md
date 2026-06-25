@@ -15,6 +15,7 @@ the hook *names* won't match, but the shape Argus expects is the same.
 | File | Wire as | What it captures |
 |---|---|---|
 | `hooks/push-to-argus.ts` | (shared helper, not a hook itself) | POSTs a single event to Argus, fire-and-forget |
+| `hooks/format-tool-message.ts` | (pure helper, not a hook itself) | Turns a bare tool name into a one-line summary (`Bash: git push ...`, `Edit: README.md`) instead of just repeating the tool name |
 | `hooks/tool-activity.hook.ts` | `PostToolUse`, no matcher (all tools) | Every tool call, with derived success/failure |
 | `hooks/agent-invocation.hook.ts` | `PreToolUse` + `PostToolUse`, matcher `Agent` | Subagent dispatch start/stop, with duration |
 | `hooks/checkpoint-commit.example.ts` | (snippet, not a hook) | Reports an automated git commit your own tooling makes |

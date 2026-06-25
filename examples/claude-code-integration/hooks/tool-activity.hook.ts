@@ -8,6 +8,7 @@
  */
 
 import { pushToArgus } from './push-to-argus';
+import { formatToolMessage } from './format-tool-message';
 
 interface ToolUseInput {
   session_id?: string;
@@ -43,7 +44,7 @@ async function main() {
     const failed = Boolean(data.error) || (exitCode !== undefined && Number(exitCode) !== 0);
     const isBackground = toolName === 'Bash' && data.tool_input?.run_in_background === true;
 
-    await pushToArgus('tool', toolName, data.session_id, {
+    await pushToArgus('tool', formatToolMessage(toolName, data.tool_input), data.session_id, {
       tool_input_preview: JSON.stringify(data.tool_input || {}).slice(0, 300),
       ...(data.agent_id ? { agent_type: data.agent_type } : {}),
     }, {
