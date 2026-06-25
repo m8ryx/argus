@@ -267,3 +267,6 @@ __marimo__/
 # Base compliance patterns (auto-added by gitignore-check)
 /lib/
 /lib64/
+
+# Broomy (local agent-session manager) per-repo metadata
+.broomy/
