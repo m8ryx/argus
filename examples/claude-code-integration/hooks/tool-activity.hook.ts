@@ -15,6 +15,11 @@ interface ToolUseInput {
   tool_input?: Record<string, unknown>;
   tool_response?: { exit_code?: number; exitCode?: number } & Record<string, unknown>;
   error?: string;
+  // Stamped by Claude Code itself on every tool call made inside a subagent —
+  // harness-assigned per-invocation, present here only when this tool call
+  // happened inside a subagent (absent at top level).
+  agent_id?: string;
+  agent_type?: string;
 }
 
 async function readStdin(): Promise<string> {
@@ -40,10 +45,12 @@ async function main() {
 
     await pushToArgus('tool', toolName, data.session_id, {
       tool_input_preview: JSON.stringify(data.tool_input || {}).slice(0, 300),
+      ...(data.agent_id ? { agent_type: data.agent_type } : {}),
     }, {
       status: failed ? 'failure' : 'success',
       isBackground,
       hook: 'PostToolUse',
+      agentId: data.agent_id,
     });
   } catch (e) {
     console.error('[tool-activity]', e instanceof Error ? e.message : String(e));

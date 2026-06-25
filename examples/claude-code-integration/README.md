@@ -66,6 +66,7 @@ These are the fields worth setting and why:
 | `status` | top-level | One of `success`/`failure`/`pending`/`activated` — coarse outcome, NOT an exit code |
 | `hook` | top-level | **Required for the status badge to render at all.** Must be one of `PreToolUse` / `PostToolUse` / `SubagentActivated` — anything else (or absent) and the dashboard silently shows `—` regardless of `status`. This was a real gap we hit: setting `status` alone did nothing visible until `hook` was also set. |
 | `is_background` | top-level | Distinguishes "kicked off a long-running thing" from "this finished" — don't conflate with `status`, which still describes only the launch you observed, not a later completion you can't see |
+| `agent_id` | top-level | Links a tool-call event to the subagent that produced it, so nested tool calls roll up under their parent. **If your harness has a subagent/sub-task concept, check whether it already stamps a per-invocation correlation id on tool-call payloads before building your own propagation** — Claude Code does this natively (`agent_id`/`agent_type` appear directly on `PostToolUse` payloads for tool calls made inside a subagent), which sidesteps the classic "implicit context clobbers under concurrent spawns" failure mode entirely, since nothing is threaded through shared state. |
 
 If you're porting this to a different agent harness, the porting work is
 just: find your harness's equivalent of "a tool finished" and "a sub-task
@@ -79,8 +80,11 @@ transfers.
 - `source` is self-reported and unverified — anything holding the API key
   can claim to be any source. Fine for a single-developer dashboard, not a
   basis for treating this as an audit trail.
-- Session status updates are mutable (`PATCH /sessions/{id}`) rather than
-  append-only events, so a session's prior states aren't recoverable once
-  changed.
+- Session status (`sessions.status`) is still a mutable cache column for
+  fast lookups — but as of Argus's session-lifecycle hardening, every
+  `started`/`ended` transition is *also* appended to the events table, so
+  history within the retention window is recoverable even though the cache
+  column itself gets overwritten. This is append-only-within-the-window, not
+  tamper-evident — see below.
 - Don't reach for this as a forensics/incident-reconstruction tool — it's
   debugging telemetry, not a tamper-evident ledger.

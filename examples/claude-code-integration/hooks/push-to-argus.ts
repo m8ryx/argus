@@ -42,6 +42,14 @@ export interface PushToArgusOptions {
    *  the UI. Pick whichever best matches the lifecycle point this push
    *  represents. */
   hook?: 'PreToolUse' | 'PostToolUse' | 'SubagentActivated';
+  /** Links this event to the subagent that produced it. Claude Code stamps
+   *  `agent_id`/`agent_type` directly on the PostToolUse payload for any tool
+   *  call made INSIDE a subagent — this is harness-assigned per-invocation
+   *  data, not anything you need to thread through shared/implicit context
+   *  yourself, so it's safe under concurrent subagent spawns with zero extra
+   *  propagation work. Argus's events table has a native `agent_id` column
+   *  for exactly this. */
+  agentId?: string;
 }
 
 export async function pushToArgus(
@@ -66,6 +74,7 @@ export async function pushToArgus(
         ...(opts.status ? { status: opts.status } : {}),
         ...(opts.isBackground !== undefined ? { is_background: opts.isBackground } : {}),
         ...(opts.hook ? { hook: opts.hook } : {}),
+        ...(opts.agentId ? { agent_id: opts.agentId } : {}),
       }),
       signal: AbortSignal.timeout(2000),
     });
