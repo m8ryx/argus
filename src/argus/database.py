@@ -523,6 +523,13 @@ class Database:
     def create_session(self, session_id: str, project: str | None = None) -> bool:
         """Create session record if not exists (idempotent).
 
+        `sessions.status` remains a mutable cache column for fast lookups
+        (active-session queries, idle detection), but every transition is
+        also appended to the events table via store_event() so the history
+        survives even though the cache column itself gets overwritten.
+        Without this, closing/ending a session silently destroyed the only
+        record that it had ever been in any prior state.
+
         Args:
             session_id: Claude Code session identifier
             project: Project name from event data
@@ -539,10 +546,32 @@ class Database:
             (session_id, project, started_at),
         )
         self.conn.commit()
-        return cursor.rowcount > 0
+        created = cursor.rowcount > 0
+        if created:
+            self.store_event(
+                {
+                    "source": "argus",
+                    "event_type": "session_lifecycle",
+                    "timestamp": started_at,
+                    "message": f"session started: {session_id}",
+                    "session_id": session_id,
+                    "data": {"transition": "started", "project": project},
+                }
+            )
+        return created
 
     def update_session_ended(self, session_id: str) -> bool:
         """Update session status to ended.
+
+        See create_session() docstring re: append-only lifecycle events
+        alongside the mutable status cache column. Existing callers treat
+        the return value as "session exists" and re-run unconditionally on
+        every call (re-broadcasting session_ended, re-checking abandoned
+        agents) — that behavior is preserved as-is. What's new is that the
+        lifecycle event is only recorded on the actual active->ended
+        transition, not on every redundant call, so re-ending an
+        already-ended session (e.g. a duplicate PATCH) doesn't fabricate a
+        second "session ended" event in the history.
 
         Args:
             session_id: Claude Code session identifier
@@ -550,8 +579,15 @@ class Database:
         Returns:
             True if session was updated, False if not found
         """
+        row = self.conn.execute(
+            "SELECT status FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        if row is None:
+            return False
+        was_active = row[0] != "ended"
+
         ended_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-        cursor = self.conn.execute(
+        self.conn.execute(
             """
             UPDATE sessions
             SET ended_at = ?, status = 'ended'
@@ -560,7 +596,19 @@ class Database:
             (ended_at, session_id),
         )
         self.conn.commit()
-        return cursor.rowcount > 0
+
+        if was_active:
+            self.store_event(
+                {
+                    "source": "argus",
+                    "event_type": "session_lifecycle",
+                    "timestamp": ended_at,
+                    "message": f"session ended: {session_id}",
+                    "session_id": session_id,
+                    "data": {"transition": "ended"},
+                }
+            )
+        return True
 
     def create_agent(
         self,
