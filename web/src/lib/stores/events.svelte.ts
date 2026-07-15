@@ -185,14 +185,13 @@ async function loadEventsForAgent(agentId: string): Promise<void> {
   }
 }
 
-// Load initial events from REST API (last hour by default)
+// Load initial events from REST API (all available history)
 async function loadInitialEvents(): Promise<void> {
   console.log("[events] Loading initial events from REST API...");
 
   try {
-    // Fetch recent events (last hour)
-    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const response = await fetch(`/events?since=${since}&limit=500`);
+    // Fetch all available events — filtering is done client-side via filtersStore
+    const response = await fetch(`/events?limit=1000`);
 
     if (!response.ok) {
       console.warn(`[events] Failed to fetch events: ${response.status}`);
@@ -228,7 +227,7 @@ async function loadInitialEvents(): Promise<void> {
       sessionsStore.updateSessionLastEventTime(sessionId, timestamp);
     }
 
-    console.log(`[events] Loaded ${eventList.length} events from last hour`);
+    console.log(`[events] Loaded ${eventList.length} events`);
   } catch (err) {
     console.error("[events] Error loading initial events:", err);
   }
