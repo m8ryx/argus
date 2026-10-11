@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ServerConfig(BaseModel):
@@ -89,6 +89,26 @@ class Config(BaseModel):
 # Event models
 
 
+_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def scrub_surrogates(value: Any) -> Any:
+    """Replace lone UTF-16 surrogates with U+FFFD, recursively through lists and dicts.
+
+    A client that truncates a string in the middle of an emoji (JavaScript's .slice()
+    counts UTF-16 code units) sends half a surrogate pair. Python stores it happily, but
+    the JSON response then fails to encode as UTF-8 and every request that includes the
+    event returns 500 — one bad event blanked the whole dashboard (2026-10-11).
+    """
+    if isinstance(value, str):
+        return _SURROGATE.sub("\ufffd", value)
+    if isinstance(value, list):
+        return [scrub_surrogates(v) for v in value]
+    if isinstance(value, dict):
+        return {scrub_surrogates(k): scrub_surrogates(v) for k, v in value.items()}
+    return value
+
+
 class EventCreate(BaseModel):
     """Event creation model for POST input.
 
@@ -97,6 +117,14 @@ class EventCreate(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _scrub_lone_surrogates(cls, data: Any) -> Any:
+        # Before validation: pydantic rejects a lone surrogate in a str field, and the 422
+        # response echoing the input then fails to encode — the client got a 500 and the
+        # event was lost. Scrubbing first means it is accepted with U+FFFD instead.
+        return scrub_surrogates(data)
 
     source: str = Field(
         ..., min_length=1, max_length=50, description="Producing application identifier"

@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from argus.models import scrub_surrogates
+
 
 class Database:
     """SQLite database for event storage."""
@@ -311,9 +313,10 @@ class Database:
                 "source": row[1],
                 "event_type": row[2],
                 "timestamp": row[3],
-                "message": row[4],
+                # Scrubbed on read too, so events stored before ingest scrubbing cannot break responses.
+                "message": scrub_surrogates(row[4]),
                 "level": row[5],
-                "data": json.loads(row[6]) if row[6] else None,
+                "data": scrub_surrogates(json.loads(row[6])) if row[6] else None,
                 "created_at": row[7],
                 "session_id": row[8],
                 "hook": row[9],
